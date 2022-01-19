@@ -37,13 +37,18 @@ class my_flight_controller(student_base):
 		# finding coordinates of fires
 		fires_raw = open("maps/boston_fire.json", "r")
 		fires_str = json.load(fires_raw)["data_fs"]
+		fires_polygon_verticies = []
 		fire_coordsx, fire_coordsy = [], []
 		for xs in fires_str["xs"]:
 			fire_coordsx.append(sum(xs)/len(xs))
+			fires_polygon_verticies.append(xs)
+		i = 0
 		for ys in fires_str["ys"]:
+			fires_polygon_verticies[i] = zip(fires_polygon_verticies[i], ys)
 			fire_coordsy.append(sum(ys)/len(ys))
 		fire_coords = list(zip(fire_coordsx, fire_coordsy))
 		print(fire_coords)
+		print(fires_polygon_verticies)
 		
 # This bit of code just makes it so that this class actually runs when executed from the command line,
 # rather than just being silently defined.
