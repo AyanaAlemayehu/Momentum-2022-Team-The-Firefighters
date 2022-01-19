@@ -85,6 +85,12 @@ class my_flight_controller(student_base):
 			
 		self.fillAdjMatrix(fire_centers)
 		print(self.adj_matrix)
+		
+		#find a way to mark a fire as complete
+		#code a function to reduce a fire to a given tolerance
+		#code a function to grab water when out of water
+		#get full tank on every pickup except for the end of the game
+
 
 	
 # This bit of code just makes it so that this class actually runs when executed from the command line,
