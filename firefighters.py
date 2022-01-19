@@ -44,21 +44,8 @@ class my_flight_controller(student_base):
 		dist = [poly.distance(point) for poly in self.water_sources_poly]
 		min_index = dist.index(min(dist))
 		p1, p2 = nearest_points(self.water_sources_poly[min_index].boundary, point)
-		print("NEAREST WATER POINT (old): " + str(p1.wkt) + "  " + str(p2.wkt))		
-		print("DISTANCE: " + str(min(dist)))			
-		pol_ext = LinearRing(self.water_sources_poly[min_index].exterior.coords)
-		d = pol_ext.project(point)
-		p = pol_ext.interpolate(d)
-		print("NEW NEAREST WATER POINNT: " + str(p.wkt))
-
-
-
-
-
-		triangle = Polygon((0, 0), (1, 0), (0.5, 1), (0, 0)])
-		square = Polygon([(0, 2), (1, 2), (1, 3), (0, 3), (0, 2)])
-		print([o.wkt for o in nearest_points(triangle, square)])
-
+		#return nearest point rounded to 5 decimal poitns
+		return (round(p1.x, 5), round(p1.y, 5))
 
 	def student_run(self, telemetry, commands):
 		
@@ -66,14 +53,16 @@ class my_flight_controller(student_base):
 		# It updates continuously, so it can be polled for new information.
 		# Use a time.sleep() between polls to keep the CPU load down and give the background communications
 		# a chance to run.
-		bash = open("launch_px4_boston.bash", "r")
-		i = 0
-		home_coords = []
-		for line in bash:
-			if i in range(6,9):
-				home_coords.append(line[line.index("=")+1:].strip("\n"))
-			i+=1
-		#print(home_coords)
+
+		# bash = open("launch_px4_boston.bash", "r")
+		# i = 0
+		#HOME COORDS IS FLIPPED
+		self.arm()
+		home_coords = [telemetry["latitude"], telemetry["longitude"]]
+		# for line in bash:
+		# 	if i in range(6,9):
+		# 		home_coords.append(line[line.index("=")+1:].strip("\n"))
+		# 	i+=1
 
 		# finding coordinates of fires
 		fires_raw = open("maps/boston_fire.json", "r")
@@ -163,8 +152,13 @@ class my_flight_controller(student_base):
 		
 		#first nearest water call that uses home base as point
 		print(home_coords)
-		self.nearestWater(Point(float(home_coords[0]), float(home_coords[1])))
+		water1 = self.nearestWater(Point(float(home_coords[1]), float(home_coords[0])))
 		
+
+		#first water source:
+		print("going to first water source")
+		self.takeoff()
+		self.goto(water1[0], water1[1], 100)
 		
 		
 		
