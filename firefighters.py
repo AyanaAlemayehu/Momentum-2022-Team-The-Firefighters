@@ -25,8 +25,25 @@ class my_flight_controller(student_base):
 		# It updates continuously, so it can be polled for new information.
 		# Use a time.sleep() between polls to keep the CPU load down and give the background communications
 		# a chance to run.
-        bash = open("../launch_px4_boston.bash", "r")
-        print(bash)
+		bash = open("launch_px4_boston.bash", "r")
+		i = 0
+		home_coords = []
+		for line in bash:
+			if i in range(6,9):
+				home_coords.append(line[line.index("=")+1:].strip("\n"))
+			i+=1
+		print(home_coords)
+
+		# finding coordinates of fires
+		fires_raw = open("maps/boston_fire.json", "r")
+		fires_str = json.load(fires_raw)["data_fs"]
+		fire_coordsx, fire_coordsy = [], []
+		for xs in fires_str["xs"]:
+			fire_coordsx.append(sum(xs)/len(xs))
+		for ys in fires_str["ys"]:
+			fire_coordsy.append(sum(ys)/len(ys))
+		fire_coords = list(zip(fire_coordsx, fire_coordsy))
+		print(fire_coords)
 		
 # This bit of code just makes it so that this class actually runs when executed from the command line,
 # rather than just being silently defined.
