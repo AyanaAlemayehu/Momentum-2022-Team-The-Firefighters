@@ -31,7 +31,7 @@ class my_flight_controller(student_base):
 			for other_fire in range(len(fire_centers)):
 				distance = ((fire_centers[fire][0] - fire_centers[other_fire][0])**2 + (fire_centers[fire][1] - fire_centers[other_fire][1])**2)**.5
 				#distance can be tailored depending on fire attributes in the future
-				adj_matrix[other_fire][fire] = distance
+				self.adj_matrix[other_fire][fire] = distance
 					
 
 	def student_run(self, telemetry, commands):
@@ -68,7 +68,7 @@ class my_flight_controller(student_base):
 		
 		
 		#filling adjacency matrix with None values
-		adj.matrix = [[None for i in range(len(fires_polygon_verticies))] for j in range(len(fires_polygon_verticies))]
+		self.adj_matrix = [[None for i in range(len(fire_centers))] for j in range(len(fire_centers))]
 		
 		
 		fires_shapes = []
@@ -79,12 +79,12 @@ class my_flight_controller(student_base):
 
 		#generating dictionary that holds information for each fire, where the fire averaged centers are keys
 		i=0
-		for shapes in fire_shapes:
-			fire_size_to_coordinates[fire_centers[i]] = shape
+		for shapes in fires_shapes:
+			self.fire_size_to_coordinates[fire_centers[i]] = shapes
 			i+=1
 			
-		fillAdjMatrix(fire_centers)
-		print(adj_matrix)
+		self.fillAdjMatrix(fire_centers)
+		print(self.adj_matrix)
 
 	
 # This bit of code just makes it so that this class actually runs when executed from the command line,
