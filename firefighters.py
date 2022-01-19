@@ -47,6 +47,7 @@ class my_flight_controller(student_base):
 		for ys in fires_str["ys"]:
 			fires_polygon_verticies[i] = zip(fires_polygon_verticies[i], ys)
 			fire_coordsy.append(sum(ys)/len(ys))
+			i += 1
 		fire_coords = list(zip(fire_coordsx, fire_coordsy))
 		print(fire_coords)
 		print(fires_polygon_verticies)
