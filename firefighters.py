@@ -1,3 +1,4 @@
+from shapely.geometry import Polygon
 from student_base import student_base
 import time
 import numpy
@@ -49,6 +50,10 @@ class my_flight_controller(student_base):
 		fire_coords = list(zip(fire_coordsx, fire_coordsy))
 		print(fire_coords)
 		print(fires_polygon_verticies)
+		
+		fires_shapes = []
+		for fire_verticies in fires_polygon_verticies:
+			fires_shapes.append(Polygon(fire_verticies))
 		
 # This bit of code just makes it so that this class actually runs when executed from the command line,
 # rather than just being silently defined.
