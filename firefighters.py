@@ -20,6 +20,19 @@ class my_flight_controller(student_base):
 	student_run(self, telemetry: Dict, commands: Dict (optional))
 		Method that takes in telemetry and issues drone commands.
 	"""
+	
+	adj_matrix = []
+	fire_size_to_coordinates = {}
+	
+	#incorporate different speeds for different directions, other considerations like fire size and water proximity
+	#fire_centers is a list of len 2 tuples
+	def fillAdjMatrix(self, fire_centers):
+		for fire in range(len(fire_centers)):
+			for other_fire in range(len(fire_centers)):
+				distance = ((fire_centers[fire][0] - fire_centers[other_fire][0])**2 + (fire_centers[fire][1] - fire_centers[other_fire][1])**2)**.5
+				#distance can be tailored depending on fire attributes in the future
+				adj_matrix[other_fire][fire] = distance
+					
 
 	def student_run(self, telemetry, commands):
 		
@@ -49,9 +62,14 @@ class my_flight_controller(student_base):
 			fires_polygon_verticies[i] = zip(fires_polygon_verticies[i], ys)
 			fire_coordsy.append(sum(ys)/len(ys))
 			i += 1
-		fire_coords = list(zip(fire_coordsx, fire_coordsy))
-		print(fire_coords)
+		fire_centers = list(zip(fire_coordsx, fire_coordsy))
+		print(fire_centers)
 		print(fires_polygon_verticies)
+		
+		
+		#filling adjacency matrix with None values
+		adj.matrix = [[None for i in range(len(fires_polygon_verticies))] for j in range(len(fires_polygon_verticies))]
+		
 		
 		fires_shapes = []
 		for fire_verticies in fires_polygon_verticies:
@@ -59,11 +77,14 @@ class my_flight_controller(student_base):
 
 		print(fires_shapes)
 
+		#generating dictionary that holds information for each fire, where the fire averaged centers are keys
 		i=0
-		fire_size_to_coordinates = {}
 		for shapes in fire_shapes:
-			fire_size_to_coordinates[fire_coords[i]] = shape
+			fire_size_to_coordinates[fire_centers[i]] = shape
 			i+=1
+			
+		fillAdjMatrix(fire_centers)
+		print(adj_matrix)
 
 	
 # This bit of code just makes it so that this class actually runs when executed from the command line,
