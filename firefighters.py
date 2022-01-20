@@ -158,8 +158,27 @@ class my_flight_controller(student_base):
 		#first water source:
 		print("going to first water source")
 		self.takeoff()
-		self.goto(water1[0], water1[1], 100)
+		print("Waiting 6 seconds")
+		time.sleep(6)
 		
+		# water
+		print("Go to water now")
+		goalLat = water1[1] - .0001
+		goalLon = water1[0]
+		goalAlt = 100 
+		self.goto(goalLat, goalLon, goalAlt)
+		err = numpy.linalg.norm([goalLat - telemetry['latitude'], goalLon - telemetry['longitude']])
+		tol = 0.0001 # Approximately 50 feet tolerance
+		while err > tol:
+			print('Aircraft is enroute to water')
+			time.sleep(10)
+			err = numpy.linalg.norm([goalLat - telemetry['latitude'], goalLon - telemetry['longitude']])
+		
+		#TODO
+		#make a function to fill up water to full
+		#populate adjacency matrix there
+		#plot path to say three largest fires
+		#follow path and get water as necessary
 		
 		
 
