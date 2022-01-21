@@ -33,7 +33,7 @@ class my_flight_controller(student_base):
 	runFlag = False
 	initial_size_to_coords = {}
 	initial_total_area = 0
-	total_fire_area = None
+	total_fire_area = 0
 	#regularly updated dicitonary
 	fire_size_to_coordinates = {}
 
@@ -149,6 +149,9 @@ class my_flight_controller(student_base):
 				self.initial_size_to_coords[fire_poly] = [self.telem["fire_polygons"][fire_poly].area, (xsum, ysum)]
 			self.fire_size_to_coordinates[fire_poly] = [self.telem["fire_polygons"][fire_poly].area, (xsum, ysum)]
 		self.runFlag = True
+
+		#setting total area to equal initial area here
+		self.total_fire_area = self.initial_total_area
 
 		if self.adj_matrix == None:
 			#added one to include the drone in the matrix
@@ -272,7 +275,7 @@ class my_flight_controller(student_base):
 
 
 			#CONTINOUSLY RECALCULATING TOTAL FIRE TO ACCOMODATE FOR CHANGING ENVIRONMENT
-			self.initial_total_area *= .01*telemetry["fires_pct_remaining"]
+			self.total_fire_area = self.initial_total_area*.01*telemetry["fires_pct_remaining"]
 
 			self.updateFires()
 			self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], 20)
