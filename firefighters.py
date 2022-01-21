@@ -61,6 +61,7 @@ class my_flight_controller(student_base):
 		#for example, 10 means its the top 10% of fires in size
 		#attempted adding our own drone to adjacency matrix as well
 		fire_centers.append((self.telem["longitude"], self.telem["latitude"]))
+		print("TOTAL INITIAL FIRE AREA: " + str(self.initial_total_area)  + "VS CURRENT: " + str(self.total_fire_area))
 		for fire in range(len(fire_centers)):
 			for other_fire in range(len(fire_centers) - 1):
 				if fire == other_fire:
@@ -148,10 +149,12 @@ class my_flight_controller(student_base):
 				self.initial_total_area += self.telem["fire_polygons"][fire_poly].area
 				self.initial_size_to_coords[fire_poly] = [self.telem["fire_polygons"][fire_poly].area, (xsum, ysum)]
 			self.fire_size_to_coordinates[fire_poly] = [self.telem["fire_polygons"][fire_poly].area, (xsum, ysum)]
+		
+		#setting total area to equal initial area here
+		if not self.runFlag:
+			self.total_fire_area = self.initial_total_area
 		self.runFlag = True
 
-		#setting total area to equal initial area here
-		self.total_fire_area = self.initial_total_area
 
 		if self.adj_matrix == None:
 			#added one to include the drone in the matrix
