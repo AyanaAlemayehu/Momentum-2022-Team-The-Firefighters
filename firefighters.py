@@ -1,3 +1,4 @@
+from pickle import TRUE
 from shapely.geometry import Point, Polygon
 from student_base import student_base
 from shapely.ops import nearest_points
@@ -26,7 +27,21 @@ class my_flight_controller(student_base):
 	student_run(self, telemetry: Dict, commands: Dict (optional))
 		Method that takes in telemetry and issues drone commands.
 	"""
-	
+	#-----------------------------------------
+	#PARAMETERS TO SET TO AFFECT DRONE DECIONS:
+	#-----------------------------------------
+	#Tolerance (0-100)
+	DEBUG_FLAG = True
+	INFO_FLAG = False
+	TOLERANCE = 0
+
+
+
+
+
+
+
+
 	#index using [start][end]
 	adj_matrix = None
 
@@ -44,7 +59,8 @@ class my_flight_controller(student_base):
 
 
 	def move(self, x, y):
-		print("MOVING TO: " + str((x,y)))
+		if (self.INFO_FLAG or self.DEBUG_FLAG):
+			print("MOVING TO: " + str((x,y)))
 		point = (x,y)
 		err = numpy.linalg.norm([point[0] - self.telem['latitude'], point[1] - self.telem['longitude']])
 		tol = 0.00001 # Approximately 50 feet tolerance
@@ -60,8 +76,11 @@ class my_flight_controller(student_base):
 		#tolerance is how large the fire has to be for us to consider it
 		#for example, 10 means its the top 10% of fires in size
 		#attempted adding our own drone to adjacency matrix as well
+		broke = False
 		fire_centers.append((self.telem["longitude"], self.telem["latitude"]))
-		print("TOTAL INITIAL FIRE AREA: " + str(self.initial_total_area)  + "VS CURRENT: " + str(self.total_fire_area))
+		if (self.DEBUG_FLAG):
+			print("TOTAL INITIAL FIRE AREA: " + str(self.initial_total_area)  + "VS CURRENT: " + str(self.total_fire_area))
+			print("IS LEN(TELEM['FIRES'] SAME AS FIRE_CENTERS?: " + str(len(fire_centers) - 1 == len(self.telem["fire_polygons"])))
 		for fire in range(len(fire_centers)):
 			for other_fire in range(len(fire_centers) - 1):
 				if fire == other_fire:
@@ -75,14 +94,35 @@ class my_flight_controller(student_base):
 						self.adj_matrix[fire][other_fire] = distance
 				#else its fire to fire
 				else:
-					if (self.telem["fire_polygons"][fire].area/self.total_fire_area >= tolerance*.01 and self.telem["fire_polygons"][other_fire].area/self.total_fire_area >= tolerance*.01):
-						#than we consider it
-						distance = ((fire_centers[fire][0] - fire_centers[other_fire][0])**2 + (fire_centers[fire][1] - fire_centers[other_fire][1])**2)**.5
-						#distance can be tailored depending on fire attributes in the future
-						self.adj_matrix[fire][other_fire] = distance
+					try:
+						if (self.telem["fire_polygons"][fire].area/self.total_fire_area >= tolerance*.01 and self.telem["fire_polygons"][other_fire].area/self.total_fire_area >= tolerance*.01):
+							#than we consider it
+							distance = ((fire_centers[fire][0] - fire_centers[other_fire][0])**2 + (fire_centers[fire][1] - fire_centers[other_fire][1])**2)**.5
+							#distance can be tailored depending on fire attributes in the future
+							self.adj_matrix[fire][other_fire] = distance
+					except Exception as e:
+						print("EXCEPTION HAS OCCURED")
+						print(e)
+						print(fire, other_fire)
+						print("---------")
+						print(len(self.telem["fire_polygons"]))
+						print("---------")
+						print(len(fire_centers))
+						input("press enter to continue>")
+						print("trying to fix issue")
+						broke = True
+						break
+			if broke:
+				break
+
+		if (broke):
+			self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], tolerance)
+
+
 				#else its fire to drone so we dont care
-		print("NEW ADJACENCY MATRIX")
-		print(self.adj_matrix)
+		if (self.DEBUG_FLAG):
+			print("NEW ADJACENCY MATRIX")
+			print(self.adj_matrix)
 	def nearestWater(self, point):
 		dist = [poly.distance(point) for poly in self.water_sources_poly]
 		min_index = dist.index(min(dist))
@@ -94,9 +134,11 @@ class my_flight_controller(student_base):
 		point = self.nearestWater(Point(float(self.telem["longitude"]), float(self.telem["latitude"])))
 		self.move(point[1], point[0])
 		#now that drone has arrived, wait until water pct is 100%
-		print("FILLING WATER")
+		if (self.INFO_FLAG):
+			print("FILLING WATER")
 		while self.telem["water_pct_remaining"] < 100:
-			print(self.telem["water_pct_remaining"])
+			if (self.INFO_FLAG):
+				print(self.telem["water_pct_remaining"])
 			time.sleep(1)
 			pass
 
@@ -136,6 +178,9 @@ class my_flight_controller(student_base):
 	def updateFires(self):
 		#currently updates the fire_size_to_coords dicitonary to update each fires midpoint and area
 		temp = []
+		#clear dictionary
+		self.fire_size_to_coordinates = {}
+
 		for fire_poly in range(len(self.telem["fire_polygons"])):
 			#grabbing x and y values
 			xsum = ysum = 0
@@ -165,9 +210,10 @@ class my_flight_controller(student_base):
 	def student_run(self, telemetry, commands):
 		self.telem = telemetry
 
-		print(telemetry)
-		print(" ")
-		print(" ")
+		if (self.DEBUG_FLAG):
+			print(telemetry)
+			print(" ")
+			print(" ")
 		# The telemetry dictionary contains fields that describe the drone's position and flight state.
 		# It updates continuously, so it can be polled for new information.
 		# Use a time.sleep() between polls to keep the CPU load down and give the background communications
@@ -179,8 +225,8 @@ class my_flight_controller(student_base):
 		
 		self.arm()
 		
-
-		fires_raw = open("maps/boston_fire.json", "r")
+		#CHANGE FOR DIFFERENT MAPS
+		fires_raw = open("maps/Fire_Competition.json", "r")
 		fires_json = json.load(fires_raw)
 		
 		#every time we refill the tank OR we finish a fire, re-assess the situation and possibly switch objectives
@@ -246,33 +292,44 @@ class my_flight_controller(student_base):
 		#first nearest water call that uses home base as point
 
 		#first water source:
-		print("going to first water source")
+
+		if (self.INFO_FLAG):
+			print("going to first water source")
 		self.takeoff()
-		print("Waiting 6 seconds")
+		if (self.INFO_FLAG):
+			print("Waiting 6 seconds")
 		time.sleep(6)
-		
+	
 		# water
-		print("Go to first water source")
+		if (self.INFO_FLAG):
+			print("Go to first water source")
 
 		#heart of algorithm
 		#as time decreases, having a preference over a fire closer to water may be worth it
 
 		#first refill adjacency matrix after new position from water refill
-		print("\n")
-		self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], 20)
-		print(self.adj_matrix)
-		print(self.fire_size_to_coordinates)
+		if (self.DEBUG_FLAG):
+			print("\n")
+		self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], self.TOLERANCE)
+		if (self.DEBUG_FLAG):
+			print(self.adj_matrix)
+			print(self.fire_size_to_coordinates)
 
 
 		#maybe find better condition but white true works for now
 		while True:
-			print("running")
+			if (self.INFO_FLAG):
+				print("running")
+
 			if telemetry["water_pct_remaining"] == 0:
-				print("STARTING TO GRAB WATER")
+				if (self.INFO_FLAG):
+					print("STARTING TO GRAB WATER")
 				self.fillWater()
 			#now put out the closest member of adjacency matrix
 			next_fire = self.adj_matrix[len(self.adj_matrix) - 1].index(min(self.adj_matrix[len(self.adj_matrix) - 1]))
-			print("THIS IS THE NEXT FIRE: " + str(next_fire))
+			
+			if (self.INFO_FLAG):
+				print("THIS IS THE NEXT FIRE: " + str(next_fire))
 			point = self.fire_size_to_coordinates[next_fire][1]
 			self.move(point[1], point[0])
 
@@ -281,22 +338,26 @@ class my_flight_controller(student_base):
 			self.total_fire_area = self.initial_total_area*.01*telemetry["fires_pct_remaining"]
 
 			self.updateFires()
-			self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], 20)
+			self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], self.TOLERANCE)
 			#1. get warer
 			#2. find a fire
 			#3. put out fire
 
 
 		#TODO
-		#FIND OUT WHY DRONE PAUSES (could be a physics thing, could be a thread sleeping thing, etc. office could help)
-		#FIND OUT WHY DRONE PRIORITIZES WRONG FIRES
-		#WHY DOES DRONE FULLY TURN OFF FIRE
-		#why does the second triangle not trigger but the third one early?
-		#WHY DOES IT WAIT A RANDOM AMONUT OF TIME BEFORE EXECUTING MOVE COMMANDS (increases as game prgoresses)
+
+		#POSSIBLE ERROR: when fires get really small and/or are deleted from telemetry we get a list index out of range error
+		#DOES NOT GO TO NEAREST FIRE AFTER FILLING WATER?? (easily fixable look at while loop)
+		#too many move to commands, try to slow it down?
+		#POSSIBLY DOES NOT RECOGNIZE LAKES AS WATER SOURCES
+		#could change move command to allow ovverriding for things like out of water
 		#possible solution grabs the largest fire and normalizes all the distance using that
+		#could calculate what a reasonable tolerance is for a given map
+		#start incorporating weights and forumulas to greedy algorithm
 
 
 		#NOT IMPORTANT PATHS IN ADJACENCY MATRIX ARE LEFT NONETYPE
+		#TERMINAL IS FASTER THAN VISUALIZER
 		
 
 		
