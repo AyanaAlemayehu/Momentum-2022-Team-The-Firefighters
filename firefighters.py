@@ -33,6 +33,7 @@ class my_flight_controller(student_base):
 	runFlag = False
 	initial_size_to_coords = {}
 	initial_total_area = 0
+	total_fire_area = None
 	#regularly updated dicitonary
 	fire_size_to_coordinates = {}
 
@@ -66,14 +67,14 @@ class my_flight_controller(student_base):
 					continue
 				if fire == len(fire_centers) - 1:
 					#if fire is indexed to the drone
-					if (self.telem["fire_polygons"][other_fire].area/self.initial_total_area >= tolerance*.01):
+					if (self.telem["fire_polygons"][other_fire].area/self.total_fire_area >= tolerance*.01):
 						#if the other fire is large enough, calculate distance between the drone and the other fire
 						distance = ((fire_centers[fire][0] - fire_centers[other_fire][0])**2 + (fire_centers[fire][1] - fire_centers[other_fire][1])**2)**.5
 						#distance can be tailored depending on fire attributes in the future
 						self.adj_matrix[fire][other_fire] = distance
 				#else its fire to fire
 				else:
-					if (self.telem["fire_polygons"][fire].area/self.initial_total_area >= tolerance*.01 and self.telem["fire_polygons"][other_fire].area/self.initial_total_area >= tolerance*.01):
+					if (self.telem["fire_polygons"][fire].area/self.total_fire_area >= tolerance*.01 and self.telem["fire_polygons"][other_fire].area/self.total_fire_area >= tolerance*.01):
 						#than we consider it
 						distance = ((fire_centers[fire][0] - fire_centers[other_fire][0])**2 + (fire_centers[fire][1] - fire_centers[other_fire][1])**2)**.5
 						#distance can be tailored depending on fire attributes in the future
