@@ -32,8 +32,8 @@ class my_flight_controller(student_base):
 	#-----------------------------------------
 	#Tolerance (0-100)
 	DEBUG_FLAG = True
-	INFO_FLAG = False
-	TOLERANCE = 0
+	INFO_FLAG = True
+	TOLERANCE = 10
 
 
 
@@ -51,6 +51,7 @@ class my_flight_controller(student_base):
 	total_fire_area = 0
 	#regularly updated dicitonary
 	fire_size_to_coordinates = {}
+	start_time = None
 
 
 	water_sources_poly = []
@@ -58,7 +59,7 @@ class my_flight_controller(student_base):
 	
 
 
-	def move(self, x, y):
+	def move(self, x, y, water=False):
 		if (self.INFO_FLAG or self.DEBUG_FLAG):
 			print("MOVING TO: " + str((x,y)))
 		point = (x,y)
@@ -66,6 +67,9 @@ class my_flight_controller(student_base):
 		tol = 0.00001 # Approximately 50 feet tolerance
 		self.goto(x, y, 100)
 		while err > tol:
+			if water == False and self.telem != None:
+				if self.telem["water_pct_remaining"] < 5:
+					break
 			err = numpy.linalg.norm([point[0] - self.telem['latitude'], point[1] - self.telem['longitude']])
 
 	#incorporate different speeds for different directions, other considerations like fire size and water proximity
@@ -132,7 +136,7 @@ class my_flight_controller(student_base):
 
 	def fillWater(self):
 		point = self.nearestWater(Point(float(self.telem["longitude"]), float(self.telem["latitude"])))
-		self.move(point[1], point[0])
+		self.move(point[1], point[0], True)
 		#now that drone has arrived, wait until water pct is 100%
 		if (self.INFO_FLAG):
 			print("FILLING WATER")
@@ -184,6 +188,10 @@ class my_flight_controller(student_base):
 		for fire_poly in range(len(self.telem["fire_polygons"])):
 			#grabbing x and y values
 			xsum = ysum = 0
+			#just in case a fire was deleted right before this ran
+			if (fire_poly >= len(self.telem["fire_polygons"])):
+				print("fire was deleted")
+				break
 			for coord in self.telem["fire_polygons"][fire_poly].exterior.coords[:-1]:
 				xsum += coord[0]
 				ysum += coord[1]
@@ -208,156 +216,205 @@ class my_flight_controller(student_base):
 			
 
 	def student_run(self, telemetry, commands):
-		self.telem = telemetry
+		try:
+			self.telem = telemetry
+			self.start_time = time.time()
 
-		if (self.DEBUG_FLAG):
-			print(telemetry)
-			print(" ")
-			print(" ")
-		# The telemetry dictionary contains fields that describe the drone's position and flight state.
-		# It updates continuously, so it can be polled for new information.
-		# Use a time.sleep() between polls to keep the CPU load down and give the background communications
-		# a chance to run.
+				
+			# The telemetry dictionary contains fields that describe the drone's position and flight state.
+			# It updates continuously, so it can be polled for new information.
+			# Use a time.sleep() between polls to keep the CPU load down and give the background communications
+			# a chance to run.
 
-		# bash = open("launch_px4_boston.bash", "r")
-		# i = 0
-		#HOME COORDS IS FLIPPED
-		
-		self.arm()
-		
-		#CHANGE FOR DIFFERENT MAPS
-		fires_raw = open("maps/Fire_Competition.json", "r")
-		fires_json = json.load(fires_raw)
-		
-		#every time we refill the tank OR we finish a fire, re-assess the situation and possibly switch objectives
-
-		#home_coords = [telemetry["latitude"], telemetry["longitude"]]
-		
-		# for line in bash:
-		# 	if i in range(6,9):
-		# 		home_coords.append(line[line.index("=")+1:].strip("\n"))
-		# 	i+=1
-
-		self.updateFires()
+			# bash = open("launch_px4_boston.bash", "r")
+			# i = 0
+			#HOME COORDS IS FLIPPED
 			
-		#print(self.adj_matrix)
-		
-
-
-		#find a way to mark a fire as complete
-		#code a function to reduce a fire to a given tolerance
-		#code a function to grab water when out of water
-		#get full tank on every pickup except for the end of the game
-
-
-		#attempting to get water data
-
-		bbox = (fires_json["bounds"]["maxx"][0], fires_json["bounds"]["maxy"][0], fires_json["bounds"]["minx"][0], fires_json["bounds"]["miny"][0])
-		bounding_polygon = Polygon([(bbox[0], bbox[1]), 
-                            (bbox[0], bbox[3]), 
-                            (bbox[2], bbox[3]), 
-                            (bbox[2], bbox[1]), 
-                            (bbox[0], bbox[1])])
-
-		rivers = gpd.read_file('data/ne_10m_rivers_north_america.geojson', 
-							bbox=bbox, 
-							crs="EPSG:4326")
-		lakes = gpd.read_file('data/ne_10m_lakes.geojson', 
-							bbox=bbox, 
-							crs="EPSG:4326")
-		usa_states = gpd.read_file('data/cb_2018_us_state_20m.zip', 
-								bbox=bbox, 
-								crs="EPSG:4326")
-		oceans = gpd.read_file('data/ne_10m_ocean_scale_rank.geojson', 
-							bbox=bbox, 
-							crs="EPSG:4326")
-
-
-		# Clean up data
-		rivers = rivers[rivers.featurecla != 'Lake Centerline']
-		rivers = rivers[rivers.featurecla != 'Lake Centerline (Intermittent)']
-		oceans = gpd.clip(oceans, bounding_polygon).to_crs("EPSG:4326")
-
-		# Combine waterbody data
-		waterbodies = rivers.append(lakes)
-		waterbodies = waterbodies.append(oceans)
-
-		#print(waterbodies)
-		waterbodies.to_file("waterbodies.geojson", driver='GeoJSON')
-		
-		#converting waterbodies into polygons
-		for raw_poly in json.loads(waterbodies.to_json())["features"][0]["geometry"]["coordinates"]:
-			self.water_sources_poly.append(Polygon(raw_poly[0]))
-		
-		#first nearest water call that uses home base as point
-
-		#first water source:
-
-		if (self.INFO_FLAG):
-			print("going to first water source")
-		self.takeoff()
-		if (self.INFO_FLAG):
-			print("Waiting 6 seconds")
-		time.sleep(6)
-	
-		# water
-		if (self.INFO_FLAG):
-			print("Go to first water source")
-
-		#heart of algorithm
-		#as time decreases, having a preference over a fire closer to water may be worth it
-
-		#first refill adjacency matrix after new position from water refill
-		if (self.DEBUG_FLAG):
-			print("\n")
-		self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], self.TOLERANCE)
-		if (self.DEBUG_FLAG):
-			print(self.adj_matrix)
-			print(self.fire_size_to_coordinates)
-
-
-		#maybe find better condition but white true works for now
-		while True:
-			if (self.INFO_FLAG):
-				print("running")
-
-			if telemetry["water_pct_remaining"] == 0:
-				if (self.INFO_FLAG):
-					print("STARTING TO GRAB WATER")
-				self.fillWater()
-			#now put out the closest member of adjacency matrix
-			next_fire = self.adj_matrix[len(self.adj_matrix) - 1].index(min(self.adj_matrix[len(self.adj_matrix) - 1]))
+			self.arm()
 			
-			if (self.INFO_FLAG):
-				print("THIS IS THE NEXT FIRE: " + str(next_fire))
-			point = self.fire_size_to_coordinates[next_fire][1]
-			self.move(point[1], point[0])
+			#CHANGE FOR DIFFERENT MAPS
+			fires_raw = open("maps/Fire_Competition.json", "r")
+			fires_json = json.load(fires_raw)
+			
+			#every time we refill the tank OR we finish a fire, re-assess the situation and possibly switch objectives
 
-
-			#CONTINOUSLY RECALCULATING TOTAL FIRE TO ACCOMODATE FOR CHANGING ENVIRONMENT
-			self.total_fire_area = self.initial_total_area*.01*telemetry["fires_pct_remaining"]
+			#home_coords = [telemetry["latitude"], telemetry["longitude"]]
+			
+			# for line in bash:
+			# 	if i in range(6,9):
+			# 		home_coords.append(line[line.index("=")+1:].strip("\n"))
+			# 	i+=1
 
 			self.updateFires()
+				
+			#print(self.adj_matrix)
+			
+
+
+			#find a way to mark a fire as complete
+			#code a function to reduce a fire to a given tolerance
+			#code a function to grab water when out of water
+			#get full tank on every pickup except for the end of the game
+
+			#attempting to get water data
+
+			bbox = (fires_json["bounds"]["maxx"][0], fires_json["bounds"]["maxy"][0], fires_json["bounds"]["minx"][0], fires_json["bounds"]["miny"][0])
+			bounding_polygon = Polygon([(bbox[0], bbox[1]), 
+								(bbox[0], bbox[3]), 
+								(bbox[2], bbox[3]), 
+								(bbox[2], bbox[1]), 
+								(bbox[0], bbox[1])])
+
+			rivers = gpd.read_file('data/ne_10m_rivers_north_america.geojson', 
+								bbox=bbox, 
+								crs="EPSG:4326")
+			lakes = gpd.read_file('data/ne_10m_lakes.geojson', 
+								bbox=bbox, 
+								crs="EPSG:4326")
+			usa_states = gpd.read_file('data/cb_2018_us_state_20m.zip', 
+									bbox=bbox, 
+									crs="EPSG:4326")
+			oceans = gpd.read_file('data/ne_10m_ocean_scale_rank.geojson', 
+								bbox=bbox, 
+								crs="EPSG:4326")
+
+
+			# Clean up data
+			rivers = rivers[rivers.featurecla != 'Lake Centerline']
+			rivers = rivers[rivers.featurecla != 'Lake Centerline (Intermittent)']
+			oceans = gpd.clip(oceans, bounding_polygon).to_crs("EPSG:4326")
+
+			# Combine waterbody data
+			waterbodies = rivers.append(lakes)
+			waterbodies = waterbodies.append(oceans)
+
+			#print(waterbodies)
+			with open("student/waterbodies.geojson") as f:
+				gj = gpd.read_file(f, bbox=bbox, crs="EPSG:4326")
+			gj = gpd.clip(gj, bounding_polygon).to_crs("EPSG:4326")
+			gj.to_file("waterbodies.geojson", driver='GeoJSON')
+
+			#converting waterbodies into polygons
+			for raw_poly in json.loads(gj.to_json())["features"]:
+				# print("RAWPOLY")
+				# print(raw_poly["geometry"]["coordinates"])
+				for inner in raw_poly["geometry"]["coordinates"]:
+					if len(raw_poly["geometry"]["coordinates"]) > 1:
+						self.water_sources_poly.append(Polygon(inner[0]))
+					else:
+						self.water_sources_poly.append(Polygon(inner))
+
+
+			if (self.DEBUG_FLAG):
+				print("TELEMETRY BELOW: ")
+				print(telemetry)
+				print(" ")
+				print(" ")
+				print("WATER SOURCES BELOW: ")
+				for water in self.water_sources_poly:
+					print(" >" + str(water.centroid))
+				
+			#first nearest water call that uses home base as point
+
+			#first water source:
+
+			if (self.INFO_FLAG):
+				print("going to first water source")
+			self.takeoff()
+			if (self.INFO_FLAG):
+				print("Waiting 6 seconds")
+			time.sleep(6)
+		
+			# water
+			if (self.INFO_FLAG):
+				print("Go to first water source")
+
+			#heart of algorithm
+			#as time decreases, having a preference over a fire closer to water may be worth it
+
+			#first refill adjacency matrix after new position from water refill
+			if (self.DEBUG_FLAG):
+				print("\n")
 			self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], self.TOLERANCE)
-			#1. get warer
-			#2. find a fire
-			#3. put out fire
+			if (self.DEBUG_FLAG):
+				print(self.adj_matrix)
+				print(self.fire_size_to_coordinates)
 
 
-		#TODO
+			#maybe find better condition but white true works for now
+			while True:
+				if ((time.time() - self.start_time) >= 480):
+					print("Final 2 minutes, tolerance has been dropped to 0")
+					self.TOLERANCE = 0
+					self.updateFires()
+					self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], self.TOLERANCE)
 
-		#POSSIBLE ERROR: when fires get really small and/or are deleted from telemetry we get a list index out of range error
-		#DOES NOT GO TO NEAREST FIRE AFTER FILLING WATER?? (easily fixable look at while loop)
-		#too many move to commands, try to slow it down?
-		#POSSIBLY DOES NOT RECOGNIZE LAKES AS WATER SOURCES
-		#could change move command to allow ovverriding for things like out of water
-		#possible solution grabs the largest fire and normalizes all the distance using that
-		#could calculate what a reasonable tolerance is for a given map
-		#start incorporating weights and forumulas to greedy algorithm
+				if telemetry["water_pct_remaining"] == 0:
+					if (self.INFO_FLAG):
+						print("STARTING TO GRAB WATER")
+					self.fillWater()
+				#now put out the closest member of adjacency matrix
+				next_fire = self.adj_matrix[len(self.adj_matrix) - 1].index(min(self.adj_matrix[len(self.adj_matrix) - 1]))
+				
+				if (self.INFO_FLAG):
+					print("THIS IS THE NEXT FIRE: " + str(next_fire))
+				point = self.fire_size_to_coordinates[next_fire][1]
+				self.move(point[1], point[0])
 
 
-		#NOT IMPORTANT PATHS IN ADJACENCY MATRIX ARE LEFT NONETYPE
-		#TERMINAL IS FASTER THAN VISUALIZER
+				#CONTINOUSLY RECALCULATING TOTAL FIRE TO ACCOMODATE FOR CHANGING ENVIRONMENT
+				self.total_fire_area = self.initial_total_area*.01*telemetry["fires_pct_remaining"]
+
+				self.updateFires()
+				self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], self.TOLERANCE)
+				#1. get warer
+				#2. find a fire
+				#3. put out fire
+
+
+			#TODO
+
+
+			#change center to centroid using shapley
+			#could have radius of next steps anda budget of distance
+			#put out fire com[pletley]
+			#POSSIBLE ERROR: when fires get really small and/or are deleted from telemetry we get a list index out of range error
+			#DOES NOT GO TO NEAREST FIRE AFTER FILLING WATER?? (easily fixable look at while loop)
+			#too many move to commands, try to slow it down?
+			#could change move command to allow ovverriding for things like out of water
+			#possible solution grabs the largest fire and normalizes all the distance using that
+			#could calculate what a reasonable tolerance is for a given map
+			#start incorporating weights and forumulas to greedy algorithm
+
+
+			#NOT IMPORTANT PATHS IN ADJACENCY MATRIX ARE LEFT INFINTIY
+			#TERMINAL IS FASTER THAN VISUALIZER
+		except Exception as e:
+			print("AN EXCEPTION HAS OCCURED")
+			print(e)
+			print("PRINTING STATUS:")
+			print("----------------------------")
+			print("ADJ MATRIX: ")
+			print(self.adj_matrix)
+			print("")
+			print("INITIAL SIZE TO COORDS: ")
+			print(self.initial_size_to_coords)
+			print("")
+			print("INITIAL TOTAL AREA: ")
+			print(self.initial_total_area)
+			print("")
+			print("TOTAL FIRE AREA: ")
+			print(self.initial_total_area)
+			print("")
+			print("FIRE SIZE TO COORDINATES: ")
+			print(self.fire_size_to_coordinates)
+			print("")	
+			print("WATER POLYGONS: ")
+			print(self.water_sources_poly)
+			print("")
+			print("TELEMETRY: ")
+			print(self.telem)
+
 		
 
 		
