@@ -31,10 +31,11 @@ class my_flight_controller(student_base):
 	#PARAMETERS TO SET TO AFFECT DRONE DECIONS:
 	#-----------------------------------------
 	#Tolerance (0-100)
-	DEBUG_FLAG = True
+	DEBUG_FLAG = False
 	INFO_FLAG = True
-	TOLERANCE = 10
-
+	TOLERANCE = 9
+	MAX_WATER = 95
+	QUIT_TIME = 525
 
 
 
@@ -59,18 +60,36 @@ class my_flight_controller(student_base):
 	
 
 
-	def move(self, x, y, water=False):
+	def move(self, x, y, water=False, fire=False, fire_index = 0):
 		if (self.INFO_FLAG or self.DEBUG_FLAG):
 			print("MOVING TO: " + str((x,y)))
 		point = (x,y)
 		err = numpy.linalg.norm([point[0] - self.telem['latitude'], point[1] - self.telem['longitude']])
 		tol = 0.00001 # Approximately 50 feet tolerance
 		self.goto(x, y, 100)
+
 		while err > tol:
 			if water == False and self.telem != None:
 				if self.telem["water_pct_remaining"] < 5:
 					break
+			if time.time() - self.start_time > 480:
+				break
 			err = numpy.linalg.norm([point[0] - self.telem['latitude'], point[1] - self.telem['longitude']])
+
+		if fire:
+			current_fire = self.fire_size_to_coordinates[fire_index]
+			while current_fire[0]/self.total_fire_area > .005: #the fire is now negligible
+
+				if time.time() - self.start_time > self.QUIT_TIME:
+					break
+				if water == False and self.telem != None:
+					if self.telem["water_pct_remaining"] < 5:
+						break
+				time.sleep(1) #avoiding too many commands
+				self.goto(current_fire[1][1], current_fire[1][0], 100)
+				self.updateFires()
+				current_fire = self.fire_size_to_coordinates[fire_index]
+				print("putting out fire coords: " + str(current_fire[1]))
 
 	#incorporate different speeds for different directions, other considerations like fire size and water proximity
 	#fire_centers is a list of len 2 tuples
@@ -140,11 +159,15 @@ class my_flight_controller(student_base):
 		#now that drone has arrived, wait until water pct is 100%
 		if (self.INFO_FLAG):
 			print("FILLING WATER")
-		while self.telem["water_pct_remaining"] < 100:
+		while self.telem["water_pct_remaining"] < self.MAX_WATER:
 			if (self.INFO_FLAG):
 				print(self.telem["water_pct_remaining"])
+			if time.time() - self.start_time >= self.QUIT_TIME and self.telem["water_pct_remaining"] < 50:
+				break
 			time.sleep(1)
 			pass
+		#ADJACENCY MATRIX IS UPDATED AFTERWARDS
+
 
 	
 
@@ -200,8 +223,8 @@ class my_flight_controller(student_base):
 			temp.append((xsum, ysum))
 			if not self.runFlag:
 				self.initial_total_area += self.telem["fire_polygons"][fire_poly].area
-				self.initial_size_to_coords[fire_poly] = [self.telem["fire_polygons"][fire_poly].area, (xsum, ysum)]
-			self.fire_size_to_coordinates[fire_poly] = [self.telem["fire_polygons"][fire_poly].area, (xsum, ysum)]
+				self.initial_size_to_coords[fire_poly] = [self.telem["fire_polygons"][fire_poly].area,(self.telem["fire_polygons"][fire_poly].centroid.x, self.telem["fire_polygons"][fire_poly].centroid.y)]
+			self.fire_size_to_coordinates[fire_poly] = [self.telem["fire_polygons"][fire_poly].area, (self.telem["fire_polygons"][fire_poly].centroid.x, self.telem["fire_polygons"][fire_poly].centroid.y)]
 		
 		#setting total area to equal initial area here
 		if not self.runFlag:
@@ -343,9 +366,10 @@ class my_flight_controller(student_base):
 
 			#maybe find better condition but white true works for now
 			while True:
-				if ((time.time() - self.start_time) >= 480):
-					print("Final 2 minutes, tolerance has been dropped to 0")
-					self.TOLERANCE = 0
+				if ((time.time() - self.start_time) >= self.QUIT_TIME):
+					print("Final time, tolerance has been dropped to 2 and max fill to 50%")
+					self.MAX_WATER = 50
+					self.TOLERANCE = 2
 					self.updateFires()
 					self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], self.TOLERANCE)
 
@@ -353,14 +377,16 @@ class my_flight_controller(student_base):
 					if (self.INFO_FLAG):
 						print("STARTING TO GRAB WATER")
 					self.fillWater()
+					print("updating adj matrix after water retrieval")
+					self.fillAdjMatrix([fire[1] for fire in self.fire_size_to_coordinates.values()], self.TOLERANCE)
 				#now put out the closest member of adjacency matrix
 				next_fire = self.adj_matrix[len(self.adj_matrix) - 1].index(min(self.adj_matrix[len(self.adj_matrix) - 1]))
 				
 				if (self.INFO_FLAG):
 					print("THIS IS THE NEXT FIRE: " + str(next_fire))
 				point = self.fire_size_to_coordinates[next_fire][1]
+				#self.move(point[1], point[0], False, True, next_fire)
 				self.move(point[1], point[0])
-
 
 				#CONTINOUSLY RECALCULATING TOTAL FIRE TO ACCOMODATE FOR CHANGING ENVIRONMENT
 				self.total_fire_area = self.initial_total_area*.01*telemetry["fires_pct_remaining"]
@@ -375,13 +401,18 @@ class my_flight_controller(student_base):
 			#TODO
 
 
+			#bad distance
+			#go to commands lagging
+			#error 20?
+			
+
+
+
 			#change center to centroid using shapley
 			#could have radius of next steps anda budget of distance
 			#put out fire com[pletley]
-			#POSSIBLE ERROR: when fires get really small and/or are deleted from telemetry we get a list index out of range error
 			#DOES NOT GO TO NEAREST FIRE AFTER FILLING WATER?? (easily fixable look at while loop)
 			#too many move to commands, try to slow it down?
-			#could change move command to allow ovverriding for things like out of water
 			#possible solution grabs the largest fire and normalizes all the distance using that
 			#could calculate what a reasonable tolerance is for a given map
 			#start incorporating weights and forumulas to greedy algorithm
@@ -392,6 +423,8 @@ class my_flight_controller(student_base):
 		except Exception as e:
 			print("AN EXCEPTION HAS OCCURED")
 			print(e)
+			print("EXCEIPTION REPR BELOW:")
+			print(repr(e))
 			print("PRINTING STATUS:")
 			print("----------------------------")
 			print("ADJ MATRIX: ")
@@ -404,7 +437,7 @@ class my_flight_controller(student_base):
 			print(self.initial_total_area)
 			print("")
 			print("TOTAL FIRE AREA: ")
-			print(self.initial_total_area)
+			print(self.total_fire_area)
 			print("")
 			print("FIRE SIZE TO COORDINATES: ")
 			print(self.fire_size_to_coordinates)
